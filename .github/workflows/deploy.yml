@@ -33,7 +33,7 @@ jobs:
             docker rm fastapi-app || true
 
             echo "Pulling the latest code"
-            cd hng-task/
+            cd fastapi-book-proj/
             git pull origin main
 
             echo "Building Docker image"
