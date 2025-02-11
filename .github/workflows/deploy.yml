@@ -1,47 +1,33 @@
-name: CD Pipeline
-
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v3
 
-      - name: Build Docker Image
-        run: |
-          docker build -t fastapi-app .
-
-      - name: Push to EC2 and Deploy
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          SERVER_IP: ${{ secrets.SERVER_IP }}
-          SERVER_USER: ${{ secrets.SERVER_USER }}
-        run: |
-          echo "Creating SSH Key"
-          echo "$SSH_PRIVATE_KEY" > private_key && chmod 600 private_key
-
-          ssh -i private_key -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP << 'EOF'
-            set -e
-            echo "Stopping and removing old container if exists"
-            docker stop fastapi-app || true
-            docker rm fastapi-app || true
-
-            echo "Pulling the latest code"
-            cd fastapi-book-proj/
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            echo "Navigating to the project directory"
+            cd /app || exit 1
+            
+            echo "Fetching latest changes from GitHub"
             git pull origin main
 
-            echo "Building Docker image"
-            docker build -t fastapi-app .
+            echo "Stopping and removing old containers"
+            docker-compose down || true
+            
+            echo "Building and starting the updated containers"
+            docker-compose up -d --build
 
-            echo "Running the new container"
-            docker run -d --name fastapi-app -p 8000:8000 fastapi-app
-
-            echo "Restarting Nginx"
-            sudo systemctl restart nginx
-          EOF
+            echo "Cleaning up unused Docker images"
+            docker system prune -af
