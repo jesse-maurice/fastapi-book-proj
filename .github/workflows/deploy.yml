@@ -1,19 +1,44 @@
 name: CD Pipeline
+
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v2
-      - name: Deploy
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.SSH_KEY }}
-          script: |
-            cd /app
-            git pull
-            docker-compose up -d --build
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Build Docker Image
+        run: |
+          docker build -t fastapi-app .
+
+      - name: Push to EC2 and Deploy
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SERVER_IP: ${{ secrets.SERVER_IP }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+        run: |
+          echo "Creating SSH Key"
+          echo "$SSH_PRIVATE_KEY" > private_key && chmod 600 private_key
+
+          ssh -i private_key -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP << 'EOF'
+            # Stop and remove old container
+            docker stop fastapi-app || true
+            docker rm fastapi-app || true
+            
+            # Pull the latest code and rebuild
+            cd hng-task/
+            git pull origin main
+            docker build -t fastapi-app .
+            
+            # Run the container
+            docker run -d --name fastapi-app -p 8000:8000 fastapi-app
+            
+            # Ensure Nginx is set up properly
+            sudo systemctl restart nginx
+          EOF
