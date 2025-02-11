@@ -27,18 +27,21 @@ jobs:
           echo "$SSH_PRIVATE_KEY" > private_key && chmod 600 private_key
 
           ssh -i private_key -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP << 'EOF'
-            # Stop and remove old container
+            set -e
+            echo "Stopping and removing old container if exists"
             docker stop fastapi-app || true
             docker rm fastapi-app || true
-            
-            # Pull the latest code and rebuild
+
+            echo "Pulling the latest code"
             cd hng-task/
             git pull origin main
+
+            echo "Building Docker image"
             docker build -t fastapi-app .
-            
-            # Run the container
+
+            echo "Running the new container"
             docker run -d --name fastapi-app -p 8000:8000 fastapi-app
-            
-            # Ensure Nginx is set up properly
+
+            echo "Restarting Nginx"
             sudo systemctl restart nginx
           EOF
